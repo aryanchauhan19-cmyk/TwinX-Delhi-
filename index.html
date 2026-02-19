@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>TwinX Delhi | Smart City Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@400;500;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.110/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.110/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/TextPlugin.min.js"></script>
+    <script src="https://unpkg.com/@studio-freight/lenis@1.0.42/dist/lenis.min.js"></script>
+
+    <style>
+        /* --- GLOBAL THEME --- */
+        :root { 
+            --neon-cyan: #00f2ff; 
+            --neon-red: #ef4444; 
+            --neon-green: #00ff41; 
+            --glass-bg: rgba(20, 25, 40, 0.65);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #e0e6ed;
+            --text-muted: #94a3b8;
+        }
+
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            overflow: hidden; background: #050a10; 
+            font-family: 'Rajdhani', sans-serif; 
+            color: var(--text-main);
+            cursor: none; 
+        }
+
+        /* Fullscreen Map Container */
+        #cesiumContainer {
+            position: absolute; top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            z-index: 1; opacity: 0;
+        }
+
+        /* --- 1. CUSTOM CURSOR --- */
+        #cursor {
+            position: fixed; top: 0; left: 0; width: 40px; height: 40px;
+            border: 2px solid var(--neon-cyan); border-radius: 50%;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 10000;
+            box-shadow: 0 0 15px var(--neon-cyan);
+            transition: width 0.2s, height 0.2s;
+            mix-blend-mode: difference;
+        }
+        #cursor::after { 
+            content: ''; position: absolute; top: 50%; left: 50%;
+            width: 20px; height: 20px;
+            border-top: 2px solid var(--neon-cyan); border-bottom: 2px solid var(--neon-cyan);
+            border-radius: 50%; transform: translate(-50%, -50%);
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin { 100% { transform: translate(-50%, -50%) rotate(360deg); } }
+
+        /* --- 2. LANDING LAYER --- */
+        #landing-layer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 9999; background: linear-gradient(to bottom, #1a1f24, #0d1216);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            overflow: hidden;
+        }
+        .fog-container { position: absolute; width: 100%; height: 100%; top: 0; left: 0; overflow: hidden; z-index: 1; }
+        .fog-img {
+            position: absolute; height: 100vh; width: 300vw;
+            background: url('https://raw.githubusercontent.com/danielstuart14/CSS_FOG_ANIMATION/master/fog1.png') repeat-x;
+            background-size: contain; animation: fogAnim 60s linear infinite;
+        }
+        .fog-img-2 {
+            position: absolute; height: 100vh; width: 300vw;
+            background: url('https://raw.githubusercontent.com/danielstuart14/CSS_FOG_ANIMATION/master/fog2.png') repeat-x;
+            background-size: contain; animation: fogAnim 40s linear infinite reverse;
+            z-index: 2; opacity: 0.5;
+        }
+        @keyframes fogAnim { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(-200vw, 0, 0); } }
+
+        .landing-ui { z-index: 10; text-align: center; position: relative; }
+        .main-header { font-family: 'Orbitron', sans-serif; font-size: 80px; color: #fff; letter-spacing: -2px; margin-bottom: 40px; text-transform: uppercase; filter: blur(8px); transition: filter 0.5s ease; }
+        .main-header:hover { filter: blur(0px); text-shadow: 0 0 30px var(--neon-cyan); }
+        .init-btn { background: rgba(0,0,0,0.5); border: 1px solid var(--neon-cyan); color: var(--neon-cyan); padding: 15px 40px; font-family: 'Rajdhani'; font-size: 18px; font-weight: 700; cursor: pointer; letter-spacing: 2px; text-transform: uppercase; transition: 0.3s; backdrop-filter: blur(5px); }
+        .init-btn:hover { background: var(--neon-cyan); color: #000; box-shadow: 0 0 30px var(--neon-cyan); }
+
+        .loader-container { width: 300px; display: none; z-index: 20; position: relative; margin-top: 30px; }
+        .loader-bar { width: 100%; height: 2px; background: #333; position: relative; }
+        .loader-progress { position: absolute; height: 100%; width: 0%; background: var(--neon-cyan); }
+        .boot-text { color: var(--neon-green); font-size: 12px; margin-top: 10px; text-align: center; font-family: 'Orbitron'; }
+
+
+        /* --- 3. TOP NAV --- */
+        .top-nav {
+            position: fixed; top: 20px; left: 20px;
+            z-index: 1000; display: flex; gap: 15px; opacity: 0; align-items: center;
+        }
+        .nav-btn {
+            background: var(--glass-bg); backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border); color: #fff;
+            padding: 10px 20px; border-radius: 30px; cursor: pointer;
+            font-family: 'Rajdhani'; font-weight: 700; font-size: 13px;
+            display: flex; align-items: center; gap: 8px; transition: 0.3s;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .nav-btn:hover { background: var(--neon-cyan); color: #000; box-shadow: 0 0 20px var(--neon-cyan); }
+        .nav-btn.cost-btn { border-color: var(--neon-yellow); color: var(--neon-yellow); }
+        .nav-btn.cost-btn:hover { background: var(--neon-yellow); color: #000; }
+
+        .search-wrapper { display: flex; align-items: center; background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); border-radius: 30px; padding: 5px 15px; transition: border-color 0.3s;}
+        .search-wrapper:focus-within { border-color: var(--neon-cyan); box-shadow: 0 0 15px rgba(0, 242, 255, 0.3); }
+        .search-wrapper input { background: transparent; border: none; color: #fff; font-family: 'Rajdhani'; font-size: 14px; padding: 5px 10px; outline: none; width: 200px; }
+        .search-wrapper button { background: transparent; border: none; color: var(--text-muted); cursor: pointer; transition: 0.3s; }
+        .search-wrapper button:hover { color: var(--neon-cyan); transform: scale(1.1); }
+
+
+        /* --- 4. CYBERPUNK HUD PANEL (LEFT) --- */
+        #dashboard-panel {
+            position: absolute; top: 90px; left: 20px; bottom: 20px; width: 360px;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(0, 242, 255, 0.3);
+            border-radius: 8px; z-index: 100; display: flex; flex-direction: column;
+            transform: translateX(-150%); overflow: hidden;
+            box-shadow: 0 0 30px rgba(0, 242, 255, 0.05);
+        }
+        .panel-header { padding: 20px; border-bottom: 1px solid rgba(0, 242, 255, 0.2); }
+        .panel-title { font-family: 'Orbitron'; font-size: 18px; color: var(--neon-cyan); margin: 0; text-transform: uppercase; letter-spacing: 2px;}
+        .panel-content { flex: 1; overflow-y: auto; padding: 20px; scrollbar-width: none; }
+        .panel-content::-webkit-scrollbar { display: none; }
+
+        /* Glowing Half-Arc Gauge */
+        .aqi-container { display: flex; justify-content: center; margin-bottom: 35px; margin-top: 10px; }
+        .half-gauge { position: relative; width: 220px; height: 110px; overflow: hidden; display: flex; justify-content: center; }
+        .gauge-arc {
+            position: absolute; top: 0; left: 0; width: 220px; height: 220px;
+            border-radius: 50%; box-sizing: border-box;
+            border: 10px solid rgba(255,255,255,0.05);
+            border-bottom-color: transparent !important; border-left-color: transparent !important;
+            transform: rotate(-45deg); transition: border-color 0.5s ease, box-shadow 0.5s ease;
+            border-top-color: var(--neon-red); border-right-color: var(--neon-red);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5) inset;
+        }
+        .gauge-content { position: absolute; bottom: 0; display: flex; flex-direction: column; align-items: center; }
+        .gauge-value { font-family: 'Roboto Mono', monospace; font-size: 60px; font-weight: 700; color: #fff; line-height: 0.9; text-shadow: 0 0 15px rgba(255,255,255,0.4); }
+        .gauge-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; margin-top: 5px; }
+        .gauge-status { font-family: 'Orbitron', sans-serif; font-size: 16px; font-weight: 700; margin-top: 2px; color: var(--neon-red); text-transform: uppercase; letter-spacing: 1px;}
+        
+        .pulse-alert { animation: pulseRed 1.5s infinite alternate; }
+        @keyframes pulseRed { 0% { opacity: 1; text-shadow: 0 0 15px var(--neon-red); } 100% { opacity: 0.5; text-shadow: none; } }
+
+        /* Tech Sliders */
+        .control-group { margin-bottom: 25px; }
+        .label-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;}
+        .label-row span:last-child { font-family: 'Roboto Mono', monospace; color: var(--neon-cyan); }
+        input[type=range] { width: 100%; appearance: none; -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 2px; background: rgba(0, 242, 255, 0.3); border-radius: 0; box-shadow: 0 0 5px rgba(0, 242, 255, 0.4); }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; height: 18px; width: 8px; border-radius: 2px; background: var(--neon-cyan); margin-top: -8px; box-shadow: 0 0 10px var(--neon-cyan); cursor: pointer; }
+
+        /* Tactical Action Grid */
+        .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin-bottom: 15px; border-left: 3px solid var(--neon-cyan); padding-left: 10px; }
+        .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 25px; }
+        
+        .action-card {
+            background: transparent; border: 1px solid rgba(0, 242, 255, 0.2);
+            border-radius: 4px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+            cursor: pointer; transition: all 0.3s ease; text-align: center;
+        }
+        .action-card i { font-size: 18px; color: rgba(255,255,255,0.3); transition: 0.3s; }
+        .action-card span { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.5); font-family: 'Rajdhani', sans-serif; text-transform: uppercase; letter-spacing: 1px; transition: 0.3s;}
+        
+        .action-card:hover { border-color: rgba(0, 242, 255, 0.6); box-shadow: 0 0 10px rgba(0, 242, 255, 0.15) inset; }
+        .action-card.active { background: rgba(0, 242, 255, 0.15); border-color: var(--neon-cyan); box-shadow: 0 0 15px rgba(0, 242, 255, 0.4) inset, 0 0 10px rgba(0, 242, 255, 0.2); }
+        .action-card.active i { color: var(--neon-cyan); text-shadow: 0 0 8px var(--neon-cyan); }
+        .action-card.active span { color: #fff; text-shadow: 0 0 5px rgba(255,255,255,0.4); }
+
+        /* --- 5. AI TERMINAL (BOTTOM RIGHT) --- */
+        #ai-panel {
+            position: absolute; bottom: 20px; right: 20px; width: 350px;
+            background: rgba(10, 15, 20, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(0, 255, 65, 0.3); border-left: 4px solid var(--neon-green);
+            border-radius: 6px; z-index: 100; display: flex; flex-direction: column;
+            padding: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            transform: translateX(150%);
+            box-sizing: border-box;
+        }
+        .ai-header { font-family: 'Orbitron'; font-size: 14px; color: var(--neon-green); margin: 0 0 10px 0; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(0, 255, 65, 0.2); padding-bottom: 8px;}
+        #chatLog { height: 120px; overflow-y: auto; font-size: 12px; margin-bottom: 10px; color: var(--neon-green); font-family: 'Roboto Mono', monospace; scrollbar-width: none;}
+        #chatLog::-webkit-scrollbar { display: none; }
+        .chat-input-row { display: flex; gap: 8px; align-items: center; background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; border: 1px solid #222;}
+        #chatInput { flex: 1; background: transparent; border: none; padding: 5px; color: var(--neon-green); font-family: 'Roboto Mono', monospace; font-size: 12px; outline: none; }
+        #chatInput::placeholder { color: rgba(0, 255, 65, 0.4); }
+        .btn-send { background: rgba(0, 255, 65, 0.1); border: 1px solid var(--neon-green); color: var(--neon-green); cursor: pointer; font-weight: bold; border-radius: 2px; padding: 4px 10px; font-family: 'Roboto Mono', monospace; transition: 0.3s; text-transform: uppercase;}
+        .btn-send:hover { background: var(--neon-green); color: #000; box-shadow: 0 0 10px var(--neon-green); }
+
+
+        /* --- AUDIT MODAL --- */
+        #auditModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; display: none; justify-content: center; align-items: center; backdrop-filter: blur(8px); }
+        .audit-paper { background: #fdfdfd; color: #222; width: 600px; max-height: 90vh; overflow-y: auto; padding: 50px; box-shadow: 0 0 50px rgba(0,0,0,0.5); font-family: 'Courier Prime', monospace; position: relative; transform: rotate(-1deg); border: 1px solid #ccc; }
+        .audit-paper::before { content: 'CONFIDENTIAL'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 80px; color: rgba(255,0,0,0.08); font-weight: bold; pointer-events: none; border: 8px solid rgba(255,0,0,0.08); padding: 20px; }
+        .audit-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 20px; }
+        .audit-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px; }
+        .audit-table th { text-align: left; border-bottom: 2px solid #000; padding: 10px 5px; font-weight: bold; }
+        .audit-table td { padding: 10px 5px; border-bottom: 1px dotted #999; }
+        .audit-total { font-weight: bold; font-size: 20px; border-top: 2px solid #000; margin-top: 20px; padding-top: 15px; display: flex; justify-content: space-between; }
+        .audit-status { margin-top: 25px; padding: 15px; border: 2px solid #000; text-align: center; font-weight: bold; background: #eee; }
+        .close-audit { position: absolute; top: 15px; right: 20px; cursor: pointer; font-size: 28px; color: #000; font-weight: bold; }
+        .close-audit:hover { color: red; }
+
+    </style>
+</head>
+<body>
+
+    <div id="cursor"></div>
+
+    <div id="landing-layer">
+        <div class="fog-container">
+            <div class="fog-img"></div>
+            <div class="fog-img-2"></div>
+        </div>
+
+        <div class="landing-ui">
+            <div style="font-size: 14px; letter-spacing: 4px; color: #888; margin-bottom: 10px;">CDH DELHI PRESENTS</div>
+            <h1 class="main-header">TWINX DELHI</h1>
+            <button id="initBtn" class="init-btn" onclick="initializeSystem()">INITIALIZE SIMULATOR</button>
+        </div>
+        
+        <div class="loader-container">
+            <div class="loader-bar"><div class="loader-progress"></div></div>
+            <div class="boot-text"></div>
+        </div>
+    </div>
+
+    <div class="top-nav" style="display:none;" id="mainNav">
+        <button class="nav-btn cost-btn" onclick="openAudit()"><i class="fas fa-file-invoice-dollar"></i> Cost Analysis</button>
+        <button class="nav-btn" onclick="toggleFullScreen()"><i class="fas fa-expand"></i> Fullscreen</button>
+        
+        <div class="search-wrapper">
+            <input type="text" id="searchInput" placeholder="Search Location (e.g. Mumbai)..." onkeypress="handleEnter(event)" autocomplete="off">
+            <button onclick="searchLocation()" id="searchBtn"><i class="fas fa-search"></i></button>
+        </div>
+    </div>
+
+    <div id="dashboard-panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Policy Engine</h2>
+        </div>
+        <div class="panel-content" id="panel-content">
+            
+            <div class="aqi-container">
+                <div class="half-gauge">
+                    <div class="gauge-arc" id="gaugeArc"></div>
+                    <div class="gauge-content">
+                        <div class="gauge-value" id="aqiDisplay">450</div>
+                        <div class="gauge-label">Global AQI</div>
+                        <div class="gauge-status pulse-alert" id="aqiStatus">Severe</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="label-row"><span>Pollution Base</span> <span id="aqiValDisplay">450</span></div>
+                <input type="range" id="aqiSlider" min="50" max="600" value="450">
+            </div>
+            <div class="control-group">
+                <div class="label-row"><span>Wind Dispersion</span> <span id="speedValDisplay">10</span></div>
+                <input type="range" id="speedSlider" min="1" max="100" value="10">
+            </div>
+
+            <div class="section-title">Active Countermeasures</div>
+            <div class="action-grid" id="policyGrid">
+                </div>
+        </div>
+    </div>
+
+    <div id="ai-panel">
+        <h3 class="ai-header"><i class="fas fa-robot"></i> AI Strategist</h3>
+        <div id="chatLog">SYS_OP: Awaiting command sequence.<br>Hint: Type 'GRAP 4'.</div>
+        <div class="chat-input-row">
+            <input type="text" id="chatInput" placeholder="_ Command..." autocomplete="off">
+            <button class="btn-send" onclick="sendToAI()">EXEC</button>
+        </div>
+    </div>
+
+    <div id="auditModal">
+        <div class="audit-paper">
+            <span class="close-audit" onclick="closeAudit()">&times;</span>
+            <div class="audit-header">
+                <h2>GOVT. EXPENDITURE REPORT</h2>
+                <p>DEPARTMENT OF ENVIRONMENT</p>
+                <p>DATE: <span id="auditDate"></span></p>
+            </div>
+            <table class="audit-table">
+                <thead>
+                    <tr>
+                        <th>ITEM</th>
+                        <th>QTY/DUR</th>
+                        <th>COST (INR)</th>
+                    </tr>
+                </thead>
+                <tbody id="auditList"></tbody>
+            </table>
+            <div class="audit-total">
+                <span>GRAND TOTAL:</span>
+                <span id="auditTotal" style="color:#d32f2f">₹0.00</span>
+            </div>
+            <div id="auditStatus" class="audit-status"></div>
+        </div>
+    </div>
+
+    <div id="cesiumContainer"></div>
+
+    <script>
+        // --- CURSOR LOGIC ---
+        const cursor = document.getElementById('cursor');
+        document.addEventListener('mousemove', (e) => {
+            cursor.style.left = e.clientX + 'px';
+            cursor.style.top = e.clientY + 'px';
+        });
+
+        document.querySelector('.main-header').addEventListener('mouseenter', () => {
+            cursor.style.width = '80px'; cursor.style.height = '80px';
+            cursor.style.mixBlendMode = 'normal'; cursor.style.boxShadow = '0 0 30px #fff'; cursor.style.borderColor = '#fff';
+        });
+        document.querySelector('.main-header').addEventListener('mouseleave', () => {
+            cursor.style.width = '40px'; cursor.style.height = '40px';
+            cursor.style.mixBlendMode = 'difference'; cursor.style.boxShadow = '0 0 15px var(--neon-cyan)'; cursor.style.borderColor = 'var(--neon-cyan)';
+        });
+
+        // --- FULLSCREEN TOGGLE ---
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        // --- SEARCH BAR LOGIC (FIXED WITH CESIUM NATIVE GEOCODER) ---
+        function handleEnter(e) { if(e.key === 'Enter') searchLocation(); }
+        async function searchLocation() {
+            const query = document.getElementById('searchInput').value;
+            if(!query || !window.viewer) return;
+            
+            const btn = document.getElementById('searchBtn');
+            const originalIcon = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; // Spinner feedback
+
+            try {
+                // Using Cesium Native Ion Geocoder (Requires no CORS hacks)
+                const geocoder = new Cesium.IonGeocoderService({ scene: window.viewer.scene });
+                const results = await geocoder.geocode(query);
+                
+                if(results && results.length > 0) {
+                    window.viewer.camera.flyTo({
+                        destination: results[0].destination,
+                        duration: 2.5
+                    });
+                } else {
+                    alert("Location not found.");
+                }
+            } catch(e) { 
+                console.error("Search failed", e); 
+            } finally {
+                btn.innerHTML = originalIcon; // Reset Icon
+            }
+        }
+
+        // --- DATA (COST & POLICY) ---
+        const POLICY_COSTS = {
+            "smog_tower": { label: "Install Smog Tower", unit_cost: 220000000, monthly_opex: 1500000, type: "infrastructure", qty: 1 },
+            "anti_smog_gun": { label: "Anti-Smog Gun", unit_cost: 0, monthly_opex: 60000, type: "rental", qty: 200 },
+            "mech_sweeper": { label: "Mech. Road Sweeper", unit_cost: 5000000, monthly_opex: 150000, type: "fleet", qty: 50 },
+            "odd_even": { label: "Odd-Even Scheme", unit_cost: 0, monthly_opex: 200000000, type: "policy", qty: 1 },
+            "construction_ban": { label: "Worker Compensation", unit_cost: 0, monthly_opex: 2500000000, type: "welfare", qty: 1 },
+            "wfh": { label: "WFH Govt. Subsidy", unit_cost: 0, monthly_opex: 100000000, type: "policy", qty: 1 }
+        };
+
+        const POLICY_UI_CONFIG = {
+            "odd_even": { label: "Odd-Even", impact: 15, icon: "fa-car-side", costKey: "odd_even" },
+            "construction_ban": { label: "No Constr.", impact: 45, icon: "fa-trowel-bricks", costKey: "construction_ban" },
+            "smog_tower": { label: "Smog Tower", impact: 5, icon: "fa-fan", costKey: "smog_tower" },
+            "mech_sweeper": { label: "Mech Sweep", impact: 10, icon: "fa-truck-monster", costKey: "mech_sweeper" },
+            "anti_smog_gun": { label: "Smog Guns", impact: 8, icon: "fa-shower", costKey: "anti_smog_gun" },
+            "wfh": { label: "WFH Mode", impact: 12, icon: "fa-laptop-house", costKey: "wfh" }
+        };
+
+        const State = { aqi: 450, baseAqi: 450, currentDisplayAqi: 450, activePolicies: new Set(), windSpeed: 10 };
+
+        // --- POLICY UI GENERATION ---
+        function generatePolicies() {
+            const grid = document.getElementById('policyGrid');
+            grid.innerHTML = '';
+            for (const [key, data] of Object.entries(POLICY_UI_CONFIG)) {
+                const card = document.createElement('div');
+                card.className = 'action-card';
+                card.id = `card_${key}`;
+                card.onclick = () => togglePolicy(key, card);
+                card.innerHTML = `<i class="fas ${data.icon}"></i><span>${data.label}</span>`;
+                grid.appendChild(card);
+            }
+        }
+
+        // --- BOOT SEQUENCE ---
+        function initializeSystem() {
+            gsap.to(".init-btn", { opacity: 0, pointerEvents: "none", duration: 0.3 });
+            gsap.to(".main-header", { opacity: 0, scale: 1.5, filter: "blur(20px)", duration: 0.5 });
+            gsap.to(".fog-container", { scale: 3, opacity: 0, duration: 2, ease: "power2.in" });
+
+            document.querySelector('.loader-container').style.display = 'block';
+            const tl = gsap.timeline({onComplete: revealDashboard});
+            
+            tl.to(".loader-progress", {width: "100%", duration: 2, ease: "power2.inOut"})
+              .to(".boot-text", {text: "PURIFYING AIR FILTERS...", duration: 0.5}, "<")
+              .to(".boot-text", {text: "LOADING CITY TWIN...", duration: 0.8}, ">")
+              .to(".boot-text", {text: "SYSTEM ONLINE.", color: "#00ff41", duration: 0.5}, ">");
+        }
+
+        function revealDashboard() {
+            gsap.to("#landing-layer", {y: "-100%", duration: 1.2, ease: "power4.inOut"});
+            document.body.style.cursor = "auto";
+            document.getElementById('cursor').style.display = "none";
+            
+            gsap.to("#cesiumContainer", {opacity: 1, duration: 1});
+            
+            // Show Navigation (Top Left)
+            document.getElementById('mainNav').style.display = 'flex';
+            gsap.to(".top-nav", {opacity: 1, y: 0, duration: 0.8, delay: 0.4});
+            
+            // Show Dashboard Panel (Left)
+            gsap.to("#dashboard-panel", {x: 0, duration: 0.8, delay: 0.6, ease: "back.out(1.2)"});
+            
+            // Show AI Terminal (Bottom Right)
+            gsap.to("#ai-panel", {x: 0, duration: 0.8, delay: 0.8, ease: "back.out(1.2)"});
+            
+            initCesium();
+            generatePolicies();
+        }
+
+        // --- DASHBOARD LOGIC ---
+        function togglePolicy(key, card) {
+            State.activePolicies.has(key) ? State.activePolicies.delete(key) : State.activePolicies.add(key);
+            card.classList.toggle('active');
+            recalcImpact();
+        }
+
+        function recalcImpact() {
+            let totalReduction = 0;
+            State.activePolicies.forEach(key => totalReduction += POLICY_UI_CONFIG[key].impact);
+            State.aqi = Math.max(40, State.baseAqi - totalReduction);
+            
+            // SMOOTH ANIMATION FOR GAUGE & FOG
+            gsap.to(State, {
+                currentDisplayAqi: State.aqi,
+                duration: 2,
+                ease: "power2.out",
+                onUpdate: () => {
+                    updateGaugeVisuals(State.currentDisplayAqi);
+                }
+            });
+        }
+
+        // --- GAUGE LOGIC (HALF-ARC) ---
+        function updateGaugeVisuals(aqiVal) {
+            const display = document.getElementById('aqiDisplay');
+            const status = document.getElementById('aqiStatus');
+            const arc = document.getElementById('gaugeArc');
+            
+            display.innerText = Math.round(aqiVal);
+            
+            let color = '#00ff88'; // Neon Green
+            let label = 'Good';
+            let isSevere = false;
+
+            if (aqiVal > 50) { color = '#fcee0a'; label = 'Moderate'; }
+            if (aqiVal > 100) { color = '#ff9900'; label = 'Poor'; }
+            if (aqiVal > 200) { color = '#ef4444'; label = 'Severe'; isSevere = true; }
+
+            status.innerText = label; 
+            status.style.color = color;
+            
+            if(isSevere) {
+                status.classList.add('pulse-alert');
+            } else {
+                status.classList.remove('pulse-alert');
+            }
+
+            if(arc) {
+                arc.style.borderTopColor = color;
+                arc.style.borderRightColor = color;
+                arc.style.boxShadow = `0 0 20px ${color}80 inset`; 
+            }
+
+            // Update Native Cesium Fog Density
+            if(window.viewer) {
+                const density = (aqiVal / 500) * 0.0025;
+                window.viewer.scene.fog.density = density;
+                
+                const factor = Math.min(aqiVal / 500, 1.0);
+                window.viewer.scene.fog.color = Cesium.Color.lerp(
+                    Cesium.Color.fromCssColorString('#a4c2f4'), // Clear sky
+                    Cesium.Color.fromCssColorString('#8b7b6b'), // Smoggy brown
+                    factor, new Cesium.Color()
+                );
+            }
+        }
+
+        // --- CESIUM MAP INIT ---
+        async function initCesium() {
+            if(window.viewer) return;
+            Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3MzI3MGIyZS1jZDEwLTRiOTYtOTJjNS1mZTFlOGVkNDg4NzUiLCJpZCI6Mzg1NzcyLCJpYXQiOjE3Njk5NDc2NTJ9.fvUHQUlAGhWQE_8fClYm3sWd0pnmkD7bKYUjQfrA_5g';
+            try {
+                window.viewer = new Cesium.Viewer('cesiumContainer', {
+                    terrainProvider: await Cesium.createWorldTerrainAsync(),
+                    baseLayerPicker: false, animation: false, timeline: false, 
+                    selectionIndicator: false, infoBox: false, geocoder: false, homeButton: false, sceneModePicker: false
+                });
+
+                const buildings = await Cesium.createOsmBuildingsAsync();
+                window.viewer.scene.primitives.add(buildings);
+                
+                // Enable Native fog
+                window.viewer.scene.fog.enabled = true;
+                window.viewer.scene.fog.minimumBrightness = 0.8;
+                window.viewer.scene.skyAtmosphere.hueShift = -0.1;
+                
+                window.viewer.camera.flyTo({ 
+                    destination: Cesium.Cartesian3.fromDegrees(77.3653, 28.5192, 1000), 
+                    orientation: { pitch: Cesium.Math.toRadians(-25) } 
+                });
+
+            } catch (e) { console.log("Cesium Error:", e); }
+        }
+
+        document.getElementById('aqiSlider').oninput = (e) => {
+            State.aqi = parseInt(e.target.value);
+            State.baseAqi = State.aqi; // Reset base
+            document.getElementById('aqiValDisplay').innerText = State.aqi;
+            updateGaugeVisuals(State.aqi);
+        };
+        
+        document.getElementById('speedSlider').oninput = (e) => {
+            State.windSpeed = parseInt(e.target.value);
+            document.getElementById('speedValDisplay').innerText = State.windSpeed;
+        };
+
+
+        // --- AUDIT MODAL LOGIC ---
+        function openAudit() {
+            const modal = document.getElementById('auditModal');
+            const list = document.getElementById('auditList');
+            const totalEl = document.getElementById('auditTotal');
+            const statusEl = document.getElementById('auditStatus');
+            document.getElementById('auditDate').innerText = new Date().toLocaleDateString();
+            list.innerHTML = '';
+            let grandTotal = 0;
+
+            if(State.activePolicies.size === 0) {
+                list.innerHTML = '<tr><td colspan="3" style="text-align:center;">NO ACTIVE POLICIES</td></tr>';
+            } else {
+                State.activePolicies.forEach(uiKey => {
+                    const costKey = POLICY_UI_CONFIG[uiKey].costKey;
+                    const costData = POLICY_COSTS[costKey];
+                    if(costData) {
+                        let itemTotal = costData.type === "infrastructure" ? (costData.unit_cost * costData.qty) + costData.monthly_opex : (costData.monthly_opex * costData.qty);
+                        if (costData.type === "policy" || costData.type === "welfare") itemTotal = costData.monthly_opex;
+                        grandTotal += itemTotal;
+                        list.innerHTML += `<tr><td>${costData.label}</td><td>${costData.qty} Units/15 Days</td><td>₹${itemTotal.toLocaleString()}</td></tr>`;
+                    }
+                });
+            }
+            totalEl.innerText = `₹${grandTotal.toLocaleString()}`;
+            const BUDGET_LIMIT = 3000000000;
+            if (grandTotal < BUDGET_LIMIT) {
+                statusEl.innerHTML = "✅ APPROVED<br>Within Dept Budget (₹506 Cr)";
+                statusEl.style.color = "green"; statusEl.style.borderColor = "green"; statusEl.style.background = "#e8f5e9";
+            } else {
+                statusEl.innerHTML = "⚠️ OVER BUDGET<br>Requires Central Govt. Funds (> ₹300 Cr)";
+                statusEl.style.color = "red"; statusEl.style.borderColor = "red"; statusEl.style.background = "#ffebee";
+            }
+            modal.style.display = "flex";
+        }
+        function closeAudit() { document.getElementById('auditModal').style.display = "none"; }
+
+
+        // --- FIXED TERMINAL CHAT AI ---
+        const API_KEY = "AIzaSyBrKYHgIkNV-5QhSZmlCaq41y7Wzqp_GA4";
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+
+        async function sendToAI() {
+            const input = document.getElementById("chatInput");
+            const log = document.getElementById("chatLog");
+            const userText = input.value.trim();
+            if (!userText) return;
+
+            log.innerHTML += `<div style="color:#fff; margin-top:5px;">> ${userText}</div>`;
+            input.value = ""; log.scrollTop = log.scrollHeight;
+
+            const prompt = `
+                System: You are an Expert Policy Advisor for Delhi Pollution Control (DPCC).
+                User Input: '${userText}'
+                Logic: If 'GRAP 4' or 'Stage 4' is mentioned, you MUST recommend ['construction_ban', 'wfh'].
+                Available Action Keys: ["odd_even", "construction_ban", "smog_tower", "mech_sweeper", "anti_smog_gun", "wfh"].
+                Output Rule: Return ONLY a valid JSON object. Do not include markdown formatting or backticks.
+                Format: {"recommend": ["action_key"], "reason": "Short explanation"}
+            `;
+            
+            try {
+                // FIXED: Added headers for Content-Type
+                const response = await fetch(API_URL, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) 
+                });
+                
+                const data = await response.json();
+                
+                if(data.error) {
+                    console.error("API Error:", data.error);
+                    log.innerHTML += `<div style="color:red">ERR_CONN: API Key Invalid/Quota.</div>`;
+                    log.scrollTop = log.scrollHeight;
+                    return;
+                }
+
+                // Parse JSON safely
+                let raw = data.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim();
+                const res = JSON.parse(raw);
+                
+                // Toggle recommended UI cards
+                if(res.recommend && Array.isArray(res.recommend)) {
+                    res.recommend.forEach(id => {
+                        const card = document.getElementById(`card_${id}`);
+                        if(card && !card.classList.contains('active')) {
+                            togglePolicy(id, card);
+                        }
+                    });
+                }
+                
+                log.innerHTML += `<div style="color:var(--neon-green); margin-top:5px;">SYS_REPLY: ${res.reason}</div>`;
+            } catch (e) { 
+                console.error(e);
+                log.innerHTML += `<div style="color:red">ERR_CONN: AI OFFLINE.</div>`; 
+            }
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // Allow Enter key to submit terminal
+        document.getElementById('chatInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') { sendToAI(); }
+        });
+
+    </script>
+</body>
+</html>

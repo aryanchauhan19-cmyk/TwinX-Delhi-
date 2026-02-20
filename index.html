@@ -21,6 +21,7 @@
             --neon-cyan: #00f2ff; 
             --neon-red: #ef4444; 
             --neon-green: #00ff41; 
+            --neon-yellow: #fcee0a;
             --glass-bg: rgba(20, 25, 40, 0.65);
             --glass-border: rgba(255, 255, 255, 0.1);
             --text-main: #e0e6ed;
@@ -93,7 +94,7 @@
         .boot-text { color: var(--neon-green); font-size: 12px; margin-top: 10px; text-align: center; font-family: 'Orbitron'; }
 
 
-        /* --- 3. TOP NAV --- */
+        /* --- 3. TOP NAV & NOTIFICATIONS --- */
         .top-nav {
             position: fixed; top: 20px; left: 20px;
             z-index: 1000; display: flex; gap: 15px; opacity: 0; align-items: center;
@@ -116,15 +117,31 @@
         .search-wrapper button { background: transparent; border: none; color: var(--text-muted); cursor: pointer; transition: 0.3s; }
         .search-wrapper button:hover { color: var(--neon-cyan); transform: scale(1.1); }
 
+        /* NOTIFICATION SYSTEM */
+        #notification-container {
+            position: fixed; top: 20px; right: 20px; z-index: 2000;
+            display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+        }
+        .toast-notification {
+            background: rgba(10, 15, 20, 0.9);
+            border-left: 4px solid var(--neon-cyan);
+            border-radius: 4px; padding: 12px 20px; color: #fff;
+            font-family: 'Rajdhani', sans-serif; text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5); backdrop-filter: blur(10px);
+            display: flex; align-items: center; gap: 12px;
+            transform: translateX(120%); opacity: 0; min-width: 250px;
+        }
+        .toast-icon { font-size: 20px; }
+        .toast-content { display: flex; flex-direction: column; }
+        .toast-title { font-size: 10px; color: var(--text-muted); letter-spacing: 2px; margin-bottom: 2px;}
+        .toast-msg { font-size: 14px; font-weight: 700; letter-spacing: 1px; }
 
         /* --- 4. CYBERPUNK HUD PANEL (LEFT) --- */
         #dashboard-panel {
             position: absolute; top: 90px; left: 20px; bottom: 20px; width: 360px;
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(0, 242, 255, 0.3);
-            border-radius: 8px; z-index: 100; display: flex; flex-direction: column;
-            transform: translateX(-150%); overflow: hidden;
+            background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(0, 242, 255, 0.3); border-radius: 8px; z-index: 100; 
+            display: flex; flex-direction: column; transform: translateX(-150%); overflow: hidden;
             box-shadow: 0 0 30px rgba(0, 242, 255, 0.05);
         }
         .panel-header { padding: 20px; border-bottom: 1px solid rgba(0, 242, 255, 0.2); }
@@ -177,6 +194,15 @@
         .action-card.active i { color: var(--neon-cyan); text-shadow: 0 0 8px var(--neon-cyan); }
         .action-card.active span { color: #fff; text-shadow: 0 0 5px rgba(255,255,255,0.4); }
 
+        /* HUD Budget Tracker */
+        .budget-hud {
+            margin-top: 15px; padding: 12px; background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1); border-left: 3px solid var(--neon-yellow); border-radius: 4px;
+            display: flex; justify-content: space-between; align-items: center;
+            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1px; color: #fff; transition: 0.3s;
+        }
+
         /* --- 5. AI TERMINAL (BOTTOM RIGHT) --- */
         #ai-panel {
             position: absolute; bottom: 20px; right: 20px; width: 350px;
@@ -184,8 +210,7 @@
             border: 1px solid rgba(0, 255, 65, 0.3); border-left: 4px solid var(--neon-green);
             border-radius: 6px; z-index: 100; display: flex; flex-direction: column;
             padding: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
-            transform: translateX(150%);
-            box-sizing: border-box;
+            transform: translateX(150%); box-sizing: border-box;
         }
         .ai-header { font-family: 'Orbitron'; font-size: 14px; color: var(--neon-green); margin: 0 0 10px 0; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(0, 255, 65, 0.2); padding-bottom: 8px;}
         #chatLog { height: 120px; overflow-y: auto; font-size: 12px; margin-bottom: 10px; color: var(--neon-green); font-family: 'Roboto Mono', monospace; scrollbar-width: none;}
@@ -210,7 +235,6 @@
         .close-audit { position: absolute; top: 15px; right: 20px; cursor: pointer; font-size: 28px; color: #000; font-weight: bold; }
         .close-audit:hover { color: red; }
 
-        /* Hide native Cesium geocoder since we built a custom search */
         .cesium-viewer-geocoderContainer { display: none !important; }
 
     </style>
@@ -219,6 +243,8 @@
 
     <div id="cursor"></div>
 
+    <div id="notification-container"></div>
+
     <div id="landing-layer">
         <div class="fog-container">
             <div class="fog-img"></div>
@@ -226,7 +252,7 @@
         </div>
 
         <div class="landing-ui">
-            <div style="font-size: 14px; letter-spacing: 4px; color: #888; margin-bottom: 10px;">CDH DELHI PRESENTS</div>
+            <div style="font-size: 14px; letter-spacing: 4px; color: #888; margin-bottom: 10px; font-family: 'Rajdhani', sans-serif; font-weight: 600;">CDH DELHI PRESENTS</div>
             <h1 class="main-header">TWINX DELHI</h1>
             <button id="initBtn" class="init-btn" onclick="initializeSystem()">INITIALIZE SIMULATOR</button>
         </div>
@@ -238,6 +264,7 @@
     </div>
 
     <div class="top-nav" style="display:none;" id="mainNav">
+        <button class="nav-btn" id="heatmapBtn" onclick="toggleHeatmap()"><i class="fas fa-fire"></i> Heatmap</button>
         <button class="nav-btn cost-btn" onclick="openAudit()"><i class="fas fa-file-invoice-dollar"></i> Cost Analysis</button>
         <button class="nav-btn" onclick="toggleFullScreen()"><i class="fas fa-expand"></i> Fullscreen</button>
         
@@ -276,12 +303,18 @@
             <div class="section-title">Active Countermeasures</div>
             <div class="action-grid" id="policyGrid">
                 </div>
+
+            <div class="budget-hud" id="liveBudgetBox">
+                <span>Live Expenditure:</span>
+                <span id="hudBudgetTotal" style="color: var(--neon-green);">₹0</span>
+            </div>
+
         </div>
     </div>
 
     <div id="ai-panel">
         <h3 class="ai-header"><i class="fas fa-robot"></i> AI Strategist</h3>
-        <div id="chatLog">SYS_OP: Awaiting command sequence.<br>Hint: Type 'GRAP 4'.</div>
+        <div id="chatLog">SYS_OP: Awaiting command sequence.<br>Hint: Type 'GRAP 4', 'Sprinklers', or 'WFH'.</div>
         <div class="chat-input-row">
             <input type="text" id="chatInput" placeholder="_ Command..." autocomplete="off">
             <button class="btn-send" onclick="sendToAI()">EXEC</button>
@@ -333,6 +366,15 @@
             cursor.style.mixBlendMode = 'difference'; cursor.style.boxShadow = '0 0 15px var(--neon-cyan)'; cursor.style.borderColor = 'var(--neon-cyan)';
         });
 
+        document.querySelector('.init-btn').addEventListener('mouseenter', () => {
+            cursor.style.width = '60px'; cursor.style.height = '60px';
+            cursor.style.mixBlendMode = 'normal'; cursor.style.borderColor = '#fff'; cursor.style.boxShadow = '0 0 20px #fff';
+        });
+        document.querySelector('.init-btn').addEventListener('mouseleave', () => {
+            cursor.style.width = '40px'; cursor.style.height = '40px';
+            cursor.style.mixBlendMode = 'difference'; cursor.style.borderColor = 'var(--neon-cyan)'; cursor.style.boxShadow = '0 0 15px var(--neon-cyan)';
+        });
+
         // --- FULLSCREEN TOGGLE ---
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
@@ -375,7 +417,7 @@
             }
         }
 
-        // --- DATA (COST & POLICY) ---
+        // --- DATA (COST, POLICY, & SENSORS) ---
         const POLICY_COSTS = {
             "smog_tower": { label: "Install Smog Tower", unit_cost: 220000000, monthly_opex: 1500000, type: "infrastructure", qty: 1 },
             "anti_smog_gun": { label: "Anti-Smog Gun", unit_cost: 0, monthly_opex: 60000, type: "rental", qty: 200 },
@@ -394,7 +436,110 @@
             "wfh": { label: "WFH Mode", impact: 12, icon: "fa-laptop-house", costKey: "wfh" }
         };
 
-        const State = { aqi: 450, baseAqi: 450, currentDisplayAqi: 450, activePolicies: new Set(), windSpeed: 10 };
+        const dpccStationData = [
+          { id: "DPCC-001", lat: 28.6469, lng: 77.3160, color: '#ff3300' }, 
+          { id: "DPCC-002", lat: 28.5632, lng: 77.1869, color: '#ffaa00' }, 
+          { id: "DPCC-003", lat: 28.5306, lng: 77.2714, color: '#ff5500' }, 
+          { id: "DPCC-004", lat: 28.6619, lng: 77.1242, color: '#ff8800' }, 
+          { id: "DPCC-005", lat: 28.6328, lng: 77.2197, color: '#ff0000' }  
+        ];
+
+        const State = { aqi: 450, baseAqi: 450, currentDisplayAqi: 450, activePolicies: new Set(), windSpeed: 10, heatmapEntities: [], isHeatmapShowing: false, auditTimer: null };
+
+        // --- NOTIFICATION SYSTEM ---
+        function showNotification(actionName, isEngaged) {
+            const container = document.getElementById('notification-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification';
+            
+            const color = isEngaged ? 'var(--neon-green)' : 'var(--neon-red)';
+            const statusText = isEngaged ? 'PROTOCOL ENGAGED' : 'PROTOCOL SUSPENDED';
+            const icon = isEngaged ? 'fa-lock' : 'fa-unlock';
+            const subtext = isEngaged ? 'Resources Locked' : 'Resources Released';
+
+            toast.style.borderLeftColor = color;
+            toast.style.boxShadow = `0 0 15px ${color}40`;
+
+            toast.innerHTML = `
+                <i class="fas ${icon} toast-icon" style="color:${color};"></i>
+                <div class="toast-content">
+                    <span class="toast-title">${statusText}</span>
+                    <span class="toast-msg" style="color:${color};">${actionName}</span>
+                    <span style="font-size:10px; color:#888; margin-top:2px;">SYS: ${subtext}</span>
+                </div>
+            `;
+            
+            container.appendChild(toast);
+
+            // Animate IN
+            gsap.to(toast, { x: 0, opacity: 1, duration: 0.5, ease: "back.out(1.2)" });
+
+            // Animate OUT
+            setTimeout(() => {
+                gsap.to(toast, { 
+                    x: "120%", opacity: 0, duration: 0.4, ease: "power2.in", 
+                    onComplete: () => toast.remove() 
+                });
+            }, 3500);
+        }
+
+        // --- HEATMAP LOGIC (OWM + LOCAL 3D ZONES) ---
+        let owmHeatmapLayer;
+        function toggleHeatmap() {
+            let isShowing = false;
+            
+            if(owmHeatmapLayer) {
+                owmHeatmapLayer.show = !owmHeatmapLayer.show;
+                isShowing = owmHeatmapLayer.show;
+            } else {
+                State.isHeatmapShowing = !State.isHeatmapShowing;
+                isShowing = State.isHeatmapShowing;
+            }
+
+            State.heatmapEntities.forEach(entity => {
+                entity.show = isShowing;
+            });
+
+            const btn = document.getElementById('heatmapBtn');
+            if(isShowing) {
+                btn.style.background = 'var(--neon-red)';
+                btn.style.color = '#fff';
+                btn.style.borderColor = 'var(--neon-red)';
+                btn.style.boxShadow = '0 0 20px var(--neon-red)';
+                showNotification("Thermal Heatmap", true);
+            } else {
+                btn.style.background = 'var(--glass-bg)';
+                btn.style.color = '#fff';
+                btn.style.borderColor = 'var(--glass-border)';
+                btn.style.boxShadow = 'none';
+                showNotification("Thermal Heatmap", false);
+            }
+        }
+
+        // --- SYNTHETIC 3D ZONAL HEATMAP SETUP ---
+        function setupZonalHeatmap(viewer) {
+            dpccStationData.forEach(station => {
+                const entity = viewer.entities.add({
+                    position: Cesium.Cartesian3.fromDegrees(station.lng, station.lat),
+                    show: false, 
+                    ellipse: {
+                        semiMinorAxis: 2500.0, 
+                        semiMajorAxis: 2500.0,
+                        material: new Cesium.ColorMaterialProperty(new Cesium.CallbackProperty(() => {
+                            const factor = Math.min(State.aqi / 500, 1.0);
+                            const baseColor = Cesium.Color.lerp(
+                                Cesium.Color.fromCssColorString('#00ff88'), 
+                                Cesium.Color.fromCssColorString(station.color), 
+                                factor, new Cesium.Color()
+                            );
+                            return baseColor.withAlpha(0.4); 
+                        }, false))
+                    }
+                });
+                State.heatmapEntities.push(entity);
+            });
+        }
+
 
         // --- POLICY UI GENERATION ---
         function generatePolicies() {
@@ -444,17 +589,66 @@
             generatePolicies();
         }
 
-        // --- DASHBOARD LOGIC ---
+        // --- HUD BUDGET UPDATE LOGIC ---
+        function updateBudgetHUD() {
+            let grandTotal = 0;
+            State.activePolicies.forEach(uiKey => {
+                const costKey = POLICY_UI_CONFIG[uiKey].costKey;
+                const costData = POLICY_COSTS[costKey];
+                if(costData) {
+                    let itemTotal = costData.type === "infrastructure" ? (costData.unit_cost * costData.qty) + costData.monthly_opex : (costData.monthly_opex * costData.qty);
+                    if (costData.type === "policy" || costData.type === "welfare") itemTotal = costData.monthly_opex;
+                    grandTotal += itemTotal;
+                }
+            });
+            
+            const hudEl = document.getElementById('hudBudgetTotal');
+            const hudBox = document.getElementById('liveBudgetBox');
+            
+            hudEl.innerText = `₹${grandTotal.toLocaleString()}`;
+            
+            if (grandTotal > 3000000000) {
+                hudEl.style.color = "var(--neon-red)";
+                hudBox.style.borderLeftColor = "var(--neon-red)";
+                hudBox.style.boxShadow = "0 0 15px rgba(239, 68, 68, 0.3) inset";
+            } else {
+                hudEl.style.color = "var(--neon-green)";
+                hudBox.style.borderLeftColor = "var(--neon-yellow)";
+                hudBox.style.boxShadow = "none";
+            }
+        }
+
+        // --- DASHBOARD LOGIC (AUTO-AUDIT POPUP INCLUDED) ---
         function togglePolicy(key, card) {
-            State.activePolicies.has(key) ? State.activePolicies.delete(key) : State.activePolicies.add(key);
+            let isEngaged = false;
+            if (State.activePolicies.has(key)) {
+                State.activePolicies.delete(key);
+                isEngaged = false;
+            } else {
+                State.activePolicies.add(key);
+                isEngaged = true;
+            }
+            
             card.classList.toggle('active');
+            
+            // 1. Show the holographic notification toast
+            showNotification(POLICY_UI_CONFIG[key].label, isEngaged);
+
+            // 2. Recalculate
             recalcImpact();
+
+            // 3. Automatically pop up the full Cost Analysis paper after 5 seconds!
+            clearTimeout(State.auditTimer);
+            State.auditTimer = setTimeout(() => {
+                openAudit();
+            }, 5000); // <-- CHANGED TO 5 SECONDS
         }
 
         function recalcImpact() {
             let totalReduction = 0;
             State.activePolicies.forEach(key => totalReduction += POLICY_UI_CONFIG[key].impact);
-            State.aqi = Math.max(40, State.baseAqi - totalReduction);
+            let windBonus = State.windSpeed * 0.5; 
+            State.aqi = Math.max(40, State.baseAqi - totalReduction - windBonus);
             
             gsap.to(State, {
                 currentDisplayAqi: State.aqi,
@@ -464,6 +658,8 @@
                     updateGaugeVisuals(State.currentDisplayAqi);
                 }
             });
+
+            updateBudgetHUD();
         }
 
         // --- GAUGE LOGIC (HALF-ARC) ---
@@ -527,15 +723,26 @@
                 window.viewer.scene.fog.enabled = true;
                 window.viewer.scene.fog.minimumBrightness = 0.8;
                 window.viewer.scene.skyAtmosphere.hueShift = -0.1;
-                
-                // --- FIXED: CAMERA OFFSET FOR PERFECT CENTERING OF CONNAUGHT PLACE ---
-                // We position the camera slightly South (28.6230) and point it North (-45 pitch) 
-                // to center the circular rings of CP perfectly on the screen.
+
+                try {
+                    const owmProvider = new Cesium.UrlTemplateImageryProvider({
+                        url: 'https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=171d13993e3c16cfcabf9e2c677c49a3a4abde43',
+                        maximumLevel: 18, 
+                        credit: 'OpenWeatherMap'
+                    });
+                    owmHeatmapLayer = window.viewer.imageryLayers.addImageryProvider(owmProvider);
+                    owmHeatmapLayer.alpha = 0.55;
+                    owmHeatmapLayer.show = false; 
+                } catch(err) { console.log("OWM Heatmap Error:", err); }
+
+                setupZonalHeatmap(window.viewer);
+
+                // ADJUSTED CONNAUGHT PLACE FLIGHT - Slightly closer and perfectly centered
                 window.viewer.camera.flyTo({ 
-                    destination: Cesium.Cartesian3.fromDegrees(77.2197, 28.6230, 1800), 
+                    destination: Cesium.Cartesian3.fromDegrees(77.2190, 28.6250, 1600), 
                     orientation: { 
-                        heading: Cesium.Math.toRadians(0), // Look North
-                        pitch: Cesium.Math.toRadians(-45)  // Angle down
+                        heading: Cesium.Math.toRadians(0), 
+                        pitch: Cesium.Math.toRadians(-45)  
                     },
                     duration: 3
                 });
@@ -553,6 +760,7 @@
         document.getElementById('speedSlider').oninput = (e) => {
             State.windSpeed = parseInt(e.target.value);
             document.getElementById('speedValDisplay').innerText = State.windSpeed;
+            recalcImpact();
         };
 
 
@@ -594,7 +802,7 @@
         function closeAudit() { document.getElementById('auditModal').style.display = "none"; }
 
 
-        // --- FIXED TERMINAL CHAT AI (WITH HACKATHON FAILSAFE) ---
+        // --- EXPANDED TERMINAL CHAT AI ---
         const API_KEY = "YOUR_GEMINI_API_KEY_HERE"; 
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${API_KEY}`;
 
@@ -609,22 +817,45 @@
 
             const lowerInput = userText.toLowerCase();
 
-            // --- LOCAL FAILSAFE FOR HACKATHONS ---
-            if (lowerInput.includes('grap 4') || lowerInput.includes('stage 4')) {
+            let matchedPolicies = [];
+            let replyMessage = "";
+
+            if (lowerInput.includes('grap') || lowerInput.includes('stage 4') || lowerInput.includes('emergency')) {
+                matchedPolicies = ['construction_ban', 'wfh', 'odd_even'];
+                replyMessage = "GRAP Stage 4 Activated. Halting public projects, restricting traffic, and enforcing WFH. Expected AQI drop: 15%.";
+            } else if (lowerInput.includes('sprinkler') || lowerInput.includes('water') || lowerInput.includes('gun')) {
+                matchedPolicies = ['anti_smog_gun', 'mech_sweeper'];
+                replyMessage = "Deploying Anti-Smog Guns and Mechanical Sweepers to suppress road dust and particulate matter.";
+            } else if (lowerInput.includes('traffic') || lowerInput.includes('car') || lowerInput.includes('vehicle')) {
+                matchedPolicies = ['odd_even'];
+                replyMessage = "Implementing Odd-Even traffic rationing to reduce vehicular emissions.";
+            } else if (lowerInput.includes('construction') || lowerInput.includes('build') || lowerInput.includes('dust')) {
+                matchedPolicies = ['construction_ban'];
+                replyMessage = "Initiating strict ban on all non-essential construction and demolition activities.";
+            } else if (lowerInput.includes('tower') || lowerInput.includes('filter') || lowerInput.includes('purify')) {
+                matchedPolicies = ['smog_tower'];
+                replyMessage = "Activating central Smog Towers for localized air purification.";
+            } else if (lowerInput.includes('work from home') || lowerInput.includes('wfh') || lowerInput.includes('remote') || lowerInput.includes('office')) {
+                matchedPolicies = ['wfh'];
+                replyMessage = "Mandating 50% Work From Home for corporate and government offices.";
+            } else {
+                matchedPolicies = ['anti_smog_gun', 'smog_tower'];
+                replyMessage = "General pollution reduction initiated. Activating localized purification and dust suppression protocols.";
+            }
+
+            if (API_KEY === "YOUR_GEMINI_API_KEY_HERE" || API_KEY === "") {
                 setTimeout(() => {
-                    const recommend = ['construction_ban', 'wfh', 'odd_even'];
-                    recommend.forEach(id => {
+                    matchedPolicies.forEach(id => {
                         const card = document.getElementById(`card_${id}`);
                         if(card && !card.classList.contains('active')) togglePolicy(id, card);
                     });
                     
-                    log.innerHTML += `<div style="color:var(--neon-green); margin-top:5px;">SYS_REPLY: GRAP Stage 4 Activated. Halting public projects, restricting traffic, and enforcing WFH. Expected AQI drop: 15%.</div>`;
+                    log.innerHTML += `<div style="color:var(--neon-green); margin-top:5px;">SYS_REPLY: ${replyMessage}</div>`;
                     log.scrollTop = log.scrollHeight;
                 }, 800); 
                 return; 
             }
 
-            // --- REAL API CALL ---
             const prompt = `
                 System: You are an Expert Policy Advisor for Delhi Pollution Control (DPCC).
                 User Input: '${userText}'
@@ -643,7 +874,7 @@
                 const data = await response.json();
                 
                 if(data.error) {
-                    log.innerHTML += `<div style="color:red; margin-top:5px;">ERR_CONN: API Key Invalid. (Hint: Type 'GRAP 4')</div>`;
+                    log.innerHTML += `<div style="color:red; margin-top:5px;">ERR_CONN: API Key Invalid. Falling back to local logic...</div>`;
                     log.scrollTop = log.scrollHeight;
                     return;
                 }
@@ -660,7 +891,7 @@
                 
                 log.innerHTML += `<div style="color:var(--neon-green); margin-top:5px;">SYS_REPLY: ${res.reason}</div>`;
             } catch (e) { 
-                log.innerHTML += `<div style="color:red; margin-top:5px;">ERR_CONN: AI OFFLINE. (Hint: Type 'GRAP 4')</div>`; 
+                log.innerHTML += `<div style="color:red; margin-top:5px;">ERR_CONN: AI OFFLINE.</div>`; 
             }
             log.scrollTop = log.scrollHeight;
         }

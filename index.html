@@ -314,9 +314,10 @@
 
     <div id="ai-panel">
         <h3 class="ai-header"><i class="fas fa-robot"></i> AI Strategist</h3>
-        <div id="chatLog">SYS_OP: Awaiting command sequence.<br>Hint: Type 'GRAP 4', 'Sprinklers', or 'WFH'.</div>
+        <div id="chatLog">SYS_OP: Awaiting command sequence.<br>Hint: Type 'GRAP 4' or 'GRAP 3'.</div>
         <div class="chat-input-row">
             <input type="text" id="chatInput" placeholder="_ Command..." autocomplete="off">
+            <button class="btn-send" onclick="sendToAI('Analyze current AQI and suggest actions')" style="color: var(--neon-yellow); border-color: var(--neon-yellow);">AUTO</button>
             <button class="btn-send" onclick="sendToAI()">EXEC</button>
         </div>
     </div>
@@ -471,10 +472,8 @@
             
             container.appendChild(toast);
 
-            // Animate IN
             gsap.to(toast, { x: 0, opacity: 1, duration: 0.5, ease: "back.out(1.2)" });
 
-            // Animate OUT
             setTimeout(() => {
                 gsap.to(toast, { 
                     x: "120%", opacity: 0, duration: 0.4, ease: "power2.in", 
@@ -581,8 +580,6 @@
             gsap.to(".top-nav", {opacity: 1, y: 0, duration: 0.8, delay: 0.4});
             
             gsap.to("#dashboard-panel", {x: 0, duration: 0.8, delay: 0.6, ease: "back.out(1.2)"});
-            
-            // Show AI Terminal (Bottom Right)
             gsap.to("#ai-panel", {x: 0, duration: 0.8, delay: 0.8, ease: "back.out(1.2)"});
             
             initCesium();
@@ -631,17 +628,13 @@
             
             card.classList.toggle('active');
             
-            // 1. Show the holographic notification toast
             showNotification(POLICY_UI_CONFIG[key].label, isEngaged);
-
-            // 2. Recalculate
             recalcImpact();
 
-            // 3. Automatically pop up the full Cost Analysis paper after 5 seconds!
             clearTimeout(State.auditTimer);
             State.auditTimer = setTimeout(() => {
                 openAudit();
-            }, 5000); // <-- CHANGED TO 5 SECONDS
+            }, 5000); 
         }
 
         function recalcImpact() {
@@ -737,7 +730,6 @@
 
                 setupZonalHeatmap(window.viewer);
 
-                // ADJUSTED CONNAUGHT PLACE FLIGHT - Slightly closer and perfectly centered
                 window.viewer.camera.flyTo({ 
                     destination: Cesium.Cartesian3.fromDegrees(77.2190, 28.6250, 1600), 
                     orientation: { 
@@ -806,24 +798,50 @@
         const API_KEY = "YOUR_GEMINI_API_KEY_HERE"; 
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${API_KEY}`;
 
-        async function sendToAI() {
+        async function sendToAI(autoCommand = null) {
             const input = document.getElementById("chatInput");
             const log = document.getElementById("chatLog");
-            const userText = input.value.trim();
+            
+            let userText = autoCommand ? autoCommand : input.value.trim();
             if (!userText) return;
 
+            if (!autoCommand) input.value = ""; 
             log.innerHTML += `<div style="color:#fff; margin-top:5px;">> ${userText}</div>`;
-            input.value = ""; log.scrollTop = log.scrollHeight;
+            log.scrollTop = log.scrollHeight;
 
             const lowerInput = userText.toLowerCase();
-
             let matchedPolicies = [];
             let replyMessage = "";
 
-            if (lowerInput.includes('grap') || lowerInput.includes('stage 4') || lowerInput.includes('emergency')) {
+            // --- LOCAL AI LOGIC ---
+            if (lowerInput.includes('analyze') || lowerInput.includes('suggest') || lowerInput.includes('auto')) {
+                const currentAQI = Math.round(State.currentDisplayAqi);
+                
+                if (currentAQI > 400) {
+                    matchedPolicies = ['construction_ban', 'wfh', 'odd_even'];
+                    replyMessage = `CRITICAL ALERT (AQI ${currentAQI}): Severe pollution detected. Auto-suggesting GRAP 4 protocols (Halt Construction, Odd-Even, WFH).`;
+                } else if (currentAQI > 300) {
+                    matchedPolicies = ['anti_smog_gun', 'mech_sweeper', 'smog_tower'];
+                    replyMessage = `WARNING (AQI ${currentAQI}): Very Poor air quality. Auto-suggesting dust suppression and localized filtration.`;
+                } else if (currentAQI > 200) {
+                    matchedPolicies = ['mech_sweeper', 'smog_tower'];
+                    replyMessage = `ALERT (AQI ${currentAQI}): Poor air quality. Auto-suggesting mechanical sweeping and smog towers.`;
+                } else {
+                    matchedPolicies = [];
+                    replyMessage = `STATUS NORMAL (AQI ${currentAQI}): Air quality is within acceptable limits. No severe countermeasures required right now.`;
+                }
+            } 
+            // --- GRAP 4 FIX ---
+            else if (lowerInput.includes('grap 4') || lowerInput.includes('stage 4') || lowerInput.includes('emergency')) {
                 matchedPolicies = ['construction_ban', 'wfh', 'odd_even'];
-                replyMessage = "GRAP Stage 4 Activated. Halting public projects, restricting traffic, and enforcing WFH. Expected AQI drop: 15%.";
-            } else if (lowerInput.includes('sprinkler') || lowerInput.includes('water') || lowerInput.includes('gun')) {
+                replyMessage = "CRITICAL: GRAP Stage 4 Activated. Halting public projects, restricting traffic (Odd-Even), and enforcing WFH.";
+            } 
+            // --- GRAP 3 FIX ---
+            else if (lowerInput.includes('grap 3') || lowerInput.includes('stage 3')) {
+                matchedPolicies = ['construction_ban', 'mech_sweeper', 'anti_smog_gun'];
+                replyMessage = "SEVERE: GRAP Stage 3 Activated. Enforcing construction ban and intensifying daily dust suppression. (WFH/Odd-Even reserved for Stage 4).";
+            }
+            else if (lowerInput.includes('sprinkler') || lowerInput.includes('water') || lowerInput.includes('gun')) {
                 matchedPolicies = ['anti_smog_gun', 'mech_sweeper'];
                 replyMessage = "Deploying Anti-Smog Guns and Mechanical Sweepers to suppress road dust and particulate matter.";
             } else if (lowerInput.includes('traffic') || lowerInput.includes('car') || lowerInput.includes('vehicle')) {
@@ -839,8 +857,8 @@
                 matchedPolicies = ['wfh'];
                 replyMessage = "Mandating 50% Work From Home for corporate and government offices.";
             } else {
-                matchedPolicies = ['anti_smog_gun', 'smog_tower'];
-                replyMessage = "General pollution reduction initiated. Activating localized purification and dust suppression protocols.";
+                matchedPolicies = ['anti_smog_gun'];
+                replyMessage = "General pollution reduction initiated. Activating dust suppression protocols.";
             }
 
             if (API_KEY === "YOUR_GEMINI_API_KEY_HERE" || API_KEY === "") {
@@ -856,10 +874,13 @@
                 return; 
             }
 
+            // --- REAL API CALL ---
             const prompt = `
                 System: You are an Expert Policy Advisor for Delhi Pollution Control (DPCC).
+                Current City Status: AQI is ${Math.round(State.currentDisplayAqi)}, Wind Speed is ${State.windSpeed} km/h.
                 User Input: '${userText}'
                 Available Action Keys: ["odd_even", "construction_ban", "smog_tower", "mech_sweeper", "anti_smog_gun", "wfh"].
+                Task: If the user asks for suggestions, analyze the Current City Status and suggest the most appropriate actions.
                 Output Rule: Return ONLY a valid JSON object.
                 Format: {"recommend": ["action_key"], "reason": "Short explanation"}
             `;

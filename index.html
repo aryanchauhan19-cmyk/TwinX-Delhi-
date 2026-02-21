@@ -235,6 +235,24 @@
         .close-audit { position: absolute; top: 15px; right: 20px; cursor: pointer; font-size: 28px; color: #000; font-weight: bold; }
         .close-audit:hover { color: red; }
 
+        /* --- CENTER LOCATION & EMERGENCY ALERT --- */
+        #location-alert-box {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8);
+            background: rgba(10, 15, 20, 0.95); border: 2px solid var(--neon-yellow);
+            padding: 30px 50px; border-radius: 8px; z-index: 3000; opacity: 0; pointer-events: none;
+            text-align: center; box-shadow: 0 0 50px rgba(252, 238, 10, 0.4); backdrop-filter: blur(10px);
+            border-left: 8px solid var(--neon-yellow); transition: all 0.3s ease;
+        }
+        #location-alert-box.emergency-mode {
+            border-color: var(--neon-red);
+            box-shadow: 0 0 50px rgba(239, 68, 68, 0.6);
+            border-left: 8px solid var(--neon-red);
+        }
+        .loc-alert-title { font-family: 'Orbitron'; font-size: 24px; color: #fff; margin-bottom: 10px; letter-spacing: 2px;}
+        .loc-alert-title span { color: var(--neon-yellow); font-weight: 900; }
+        .emergency-mode .loc-alert-title span { color: var(--neon-red); }
+        .loc-alert-desc { font-family: 'Rajdhani'; font-size: 20px; color: var(--neon-cyan); font-weight: bold; text-transform: uppercase; letter-spacing: 1px;}
+
         .cesium-viewer-geocoderContainer { display: none !important; }
 
     </style>
@@ -244,6 +262,11 @@
     <div id="cursor"></div>
 
     <div id="notification-container"></div>
+    
+    <div id="location-alert-box">
+        <div class="loc-alert-title">TARGET ZONE: <span id="loc-alert-name"></span></div>
+        <div class="loc-alert-desc" id="loc-alert-desc"></div>
+    </div>
 
     <div id="landing-layer">
         <div class="fog-container">
@@ -301,8 +324,7 @@
             </div>
 
             <div class="section-title">Active Countermeasures</div>
-            <div class="action-grid" id="policyGrid">
-                </div>
+            <div class="action-grid" id="policyGrid"></div>
 
             <div class="budget-hud" id="liveBudgetBox">
                 <span>Live Expenditure:</span>
@@ -314,10 +336,9 @@
 
     <div id="ai-panel">
         <h3 class="ai-header"><i class="fas fa-robot"></i> AI Strategist</h3>
-        <div id="chatLog">SYS_OP: Awaiting command sequence.<br>Hint: Type 'GRAP 4' or 'GRAP 3'.</div>
+        <div id="chatLog">SYS_OP: Awaiting command sequence.<br>Hint: Type 'Connaught Place', 'WFH', or 'Diwali in Noida'.</div>
         <div class="chat-input-row">
             <input type="text" id="chatInput" placeholder="_ Command..." autocomplete="off">
-            <button class="btn-send" onclick="sendToAI('Analyze current AQI and suggest actions')" style="color: var(--neon-yellow); border-color: var(--neon-yellow);">AUTO</button>
             <button class="btn-send" onclick="sendToAI()">EXEC</button>
         </div>
     </div>
@@ -472,14 +493,41 @@
             
             container.appendChild(toast);
 
+            // Animate IN
             gsap.to(toast, { x: 0, opacity: 1, duration: 0.5, ease: "back.out(1.2)" });
 
+            // Animate OUT
             setTimeout(() => {
                 gsap.to(toast, { 
                     x: "120%", opacity: 0, duration: 0.4, ease: "power2.in", 
                     onComplete: () => toast.remove() 
                 });
             }, 3500);
+        }
+
+        // --- CENTER HUD ALERT FOR LOCATIONS & EMERGENCIES ---
+        function triggerLocationAlert(locationName, policyKeys, isEmergency = false) {
+            const policyNames = policyKeys.map(k => POLICY_UI_CONFIG[k].label).join(' + ');
+            const box = document.getElementById('location-alert-box');
+            const desc = document.getElementById('loc-alert-desc');
+            
+            if (isEmergency) {
+                box.classList.add('emergency-mode');
+                document.querySelector('.loc-alert-title').innerHTML = `🚨 EMERGENCY PROTOCOL: <span id="loc-alert-name">${locationName.toUpperCase()}</span> 🚨`;
+            } else {
+                box.classList.remove('emergency-mode');
+                document.querySelector('.loc-alert-title').innerHTML = `TARGET ZONE: <span id="loc-alert-name">${locationName.toUpperCase()}</span>`;
+            }
+            
+            desc.innerText = `POLICIES DEPLOYED: ${policyNames}`;
+            
+            // Pop in
+            gsap.to(box, {opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.5)"});
+            
+            // Fade out after 4 seconds
+            setTimeout(() => {
+                gsap.to(box, {opacity: 0, scale: 0.8, duration: 0.5});
+            }, 4000);
         }
 
         // --- HEATMAP LOGIC (OWM + LOCAL 3D ZONES) ---
@@ -539,7 +587,6 @@
             });
         }
 
-
         // --- POLICY UI GENERATION ---
         function generatePolicies() {
             const grid = document.getElementById('policyGrid');
@@ -580,6 +627,8 @@
             gsap.to(".top-nav", {opacity: 1, y: 0, duration: 0.8, delay: 0.4});
             
             gsap.to("#dashboard-panel", {x: 0, duration: 0.8, delay: 0.6, ease: "back.out(1.2)"});
+            
+            // Show AI Terminal (Bottom Right)
             gsap.to("#ai-panel", {x: 0, duration: 0.8, delay: 0.8, ease: "back.out(1.2)"});
             
             initCesium();
@@ -628,13 +677,17 @@
             
             card.classList.toggle('active');
             
+            // 1. Show the holographic notification toast
             showNotification(POLICY_UI_CONFIG[key].label, isEngaged);
+
+            // 2. Recalculate
             recalcImpact();
 
+            // 3. Automatically pop up the full Cost Analysis paper after 10 seconds!
             clearTimeout(State.auditTimer);
             State.auditTimer = setTimeout(() => {
                 openAudit();
-            }, 5000); 
+            }, 10000); 
         }
 
         function recalcImpact() {
@@ -730,6 +783,7 @@
 
                 setupZonalHeatmap(window.viewer);
 
+                // ADJUSTED CONNAUGHT PLACE FLIGHT
                 window.viewer.camera.flyTo({ 
                     destination: Cesium.Cartesian3.fromDegrees(77.2190, 28.6250, 1600), 
                     orientation: { 
@@ -794,54 +848,75 @@
         function closeAudit() { document.getElementById('auditModal').style.display = "none"; }
 
 
-        // --- EXPANDED TERMINAL CHAT AI ---
+        // --- EXPANDED TERMINAL CHAT AI WITH EMERGENCY LOGIC ---
         const API_KEY = "YOUR_GEMINI_API_KEY_HERE"; 
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${API_KEY}`;
 
-        async function sendToAI(autoCommand = null) {
+        // Hardcoded location list to detect user input
+        const DELHI_LOCATIONS = [
+            'bawana', 'wazirpur', 'okhla', 'narela', 'mayapuri', 'naraina', 'anand vihar', 'jahangirpuri', 'patparganj', 'jhilmil', 'badli',
+            'connaught place', 'cp', 'karol bagh', 'lajpat nagar', 'chandni chowk', 'sarojini nagar', 'south ex', 'sadar bazaar', 'rajouri garden',
+            'nehru place', 'cyber city', 'gurgaon', 'noida electronic city', 'aerocity', 'udyog vihar', 'noida',
+            'dwarka', 'rohini', 'vasant kunj', 'najafgarh', 'burari',
+            'india gate', 'lutyens', 'chanakyapuri', 'parliament', 'greater kailash', 'gk', 'hauz khas', 'defence colony'
+        ];
+
+        async function sendToAI() {
             const input = document.getElementById("chatInput");
             const log = document.getElementById("chatLog");
-            
-            let userText = autoCommand ? autoCommand : input.value.trim();
+            const userText = input.value.trim();
             if (!userText) return;
 
-            if (!autoCommand) input.value = ""; 
+            // Log user input
             log.innerHTML += `<div style="color:#fff; margin-top:5px;">> ${userText}</div>`;
-            log.scrollTop = log.scrollHeight;
+            input.value = ""; log.scrollTop = log.scrollHeight;
 
             const lowerInput = userText.toLowerCase();
+            
+            // Detection flags
+            let detectedLoc = DELHI_LOCATIONS.find(loc => lowerInput.includes(loc));
+            let isFestival = lowerInput.includes('diwali') || lowerInput.includes('dussehra') || lowerInput.includes('festival') || lowerInput.includes('firecracker') || lowerInput.includes('cracker');
+
             let matchedPolicies = [];
             let replyMessage = "";
 
-            // --- LOCAL AI LOGIC ---
-            if (lowerInput.includes('analyze') || lowerInput.includes('suggest') || lowerInput.includes('auto')) {
-                const currentAQI = Math.round(State.currentDisplayAqi);
-                
-                if (currentAQI > 400) {
-                    matchedPolicies = ['construction_ban', 'wfh', 'odd_even'];
-                    replyMessage = `CRITICAL ALERT (AQI ${currentAQI}): Severe pollution detected. Auto-suggesting GRAP 4 protocols (Halt Construction, Odd-Even, WFH).`;
-                } else if (currentAQI > 300) {
-                    matchedPolicies = ['anti_smog_gun', 'mech_sweeper', 'smog_tower'];
-                    replyMessage = `WARNING (AQI ${currentAQI}): Very Poor air quality. Auto-suggesting dust suppression and localized filtration.`;
-                } else if (currentAQI > 200) {
-                    matchedPolicies = ['mech_sweeper', 'smog_tower'];
-                    replyMessage = `ALERT (AQI ${currentAQI}): Poor air quality. Auto-suggesting mechanical sweeping and smog towers.`;
-                } else {
-                    matchedPolicies = [];
-                    replyMessage = `STATUS NORMAL (AQI ${currentAQI}): Air quality is within acceptable limits. No severe countermeasures required right now.`;
-                }
-            } 
-            // --- GRAP 4 FIX ---
-            else if (lowerInput.includes('grap 4') || lowerInput.includes('stage 4') || lowerInput.includes('emergency')) {
-                matchedPolicies = ['construction_ban', 'wfh', 'odd_even'];
-                replyMessage = "CRITICAL: GRAP Stage 4 Activated. Halting public projects, restricting traffic (Odd-Even), and enforcing WFH.";
-            } 
-            // --- GRAP 3 FIX ---
-            else if (lowerInput.includes('grap 3') || lowerInput.includes('stage 3')) {
-                matchedPolicies = ['construction_ban', 'mech_sweeper', 'anti_smog_gun'];
-                replyMessage = "SEVERE: GRAP Stage 3 Activated. Enforcing construction ban and intensifying daily dust suppression. (WFH/Odd-Even reserved for Stage 4).";
+            // --- 1. LOCAL FALLBACK LOGIC ---
+            
+            // 0. FESTIVAL EMERGENCY (Overrides standard locations)
+            if (isFestival) {
+                matchedPolicies = ['anti_smog_gun', 'mech_sweeper', 'construction_ban', 'smog_tower'];
+                replyMessage = `CRITICAL ALERT: Festival emission spike detected. Activating severe GRAP measures. Deploying Anti-Smog Guns, Mech Sweepers, and Smog Towers immediately${detectedLoc ? ` in ${detectedLoc.toUpperCase()}` : ' across the city'}.`;
             }
-            else if (lowerInput.includes('sprinkler') || lowerInput.includes('water') || lowerInput.includes('gun')) {
+            // 1. Industrial & Severe Pollution Hotspots
+            else if (lowerInput.includes('bawana') || lowerInput.includes('wazirpur') || lowerInput.includes('okhla') || lowerInput.includes('narela') || lowerInput.includes('mayapuri') || lowerInput.includes('naraina') || lowerInput.includes('anand vihar') || lowerInput.includes('jahangirpuri') || lowerInput.includes('patparganj') || lowerInput.includes('jhilmil') || lowerInput.includes('badli')) {
+                matchedPolicies = ['smog_tower', 'mech_sweeper'];
+                replyMessage = "Severe industrial/hotspot zone detected. Deploying Heavy-Duty Smog Towers and Mechanical Sweepers to neutralize industrial particulate matter and settle toxic dust.";
+            } 
+            // 2. Commercial & High Traffic Markets
+            else if (lowerInput.includes('connaught place') || lowerInput.includes('cp') || lowerInput.includes('karol bagh') || lowerInput.includes('lajpat nagar') || lowerInput.includes('chandni chowk') || lowerInput.includes('sarojini nagar') || lowerInput.includes('south ex') || lowerInput.includes('sadar bazaar') || lowerInput.includes('rajouri garden')) {
+                matchedPolicies = ['odd_even', 'anti_smog_gun'];
+                replyMessage = "High-density commercial market detected. Implementing Odd-Even to slash vehicular congestion and deploying Anti-Smog Guns for localized dust suppression.";
+            }
+            // 3. Corporate & IT Hubs
+            else if (lowerInput.includes('nehru place') || lowerInput.includes('cyber city') || lowerInput.includes('gurgaon') || lowerInput.includes('noida electronic city') || lowerInput.includes('aerocity') || lowerInput.includes('udyog vihar') || lowerInput.includes('noida')) {
+                matchedPolicies = ['wfh'];
+                replyMessage = "Major Corporate/IT hub detected. Mandating Work From Home (WFH) to drastically reduce peak-hour commuter traffic and emissions. Expected AQI drop applied.";
+            }
+            // 4. Heavy Construction & Expanding Residential
+            else if (lowerInput.includes('dwarka') || lowerInput.includes('rohini') || lowerInput.includes('vasant kunj') || lowerInput.includes('najafgarh') || lowerInput.includes('burari')) {
+                matchedPolicies = ['construction_ban', 'anti_smog_gun'];
+                replyMessage = "Extensive residential/construction zone identified. Initiating immediate Construction Ban and deploying Anti-Smog Guns to control fugitive cement and soil dust.";
+            }
+            // 5. VIP, Diplomatic & Premium Residential
+            else if (lowerInput.includes('india gate') || lowerInput.includes('lutyens') || lowerInput.includes('chanakyapuri') || lowerInput.includes('parliament') || lowerInput.includes('greater kailash') || lowerInput.includes('gk') || lowerInput.includes('hauz khas') || lowerInput.includes('defence colony')) {
+                matchedPolicies = ['mech_sweeper', 'wfh'];
+                replyMessage = "Central/Premium zone detected. Deploying targeted Mechanical Sweepers for ambient dust control and mandating WFH for non-essential staff.";
+            }
+            // 6. Generic / Emergency Commands
+            else if (lowerInput.includes('grap') || lowerInput.includes('stage 4') || lowerInput.includes('emergency')) {
+                matchedPolicies = ['construction_ban', 'wfh', 'odd_even'];
+                replyMessage = "GRAP Stage 4 Activated. Halting public projects, restricting traffic, and enforcing WFH. Expected AQI drop: 15%.";
+            } else if (lowerInput.includes('sprinkler') || lowerInput.includes('water') || lowerInput.includes('gun')) {
                 matchedPolicies = ['anti_smog_gun', 'mech_sweeper'];
                 replyMessage = "Deploying Anti-Smog Guns and Mechanical Sweepers to suppress road dust and particulate matter.";
             } else if (lowerInput.includes('traffic') || lowerInput.includes('car') || lowerInput.includes('vehicle')) {
@@ -857,32 +932,50 @@
                 matchedPolicies = ['wfh'];
                 replyMessage = "Mandating 50% Work From Home for corporate and government offices.";
             } else {
-                matchedPolicies = ['anti_smog_gun'];
-                replyMessage = "General pollution reduction initiated. Activating dust suppression protocols.";
+                matchedPolicies = ['anti_smog_gun', 'smog_tower'];
+                replyMessage = "General pollution reduction initiated. Activating localized purification and dust suppression protocols.";
             }
 
+            // Execute local fallback if API key is missing
             if (API_KEY === "YOUR_GEMINI_API_KEY_HERE" || API_KEY === "") {
                 setTimeout(() => {
+                    let anyActivated = false;
                     matchedPolicies.forEach(id => {
                         const card = document.getElementById(`card_${id}`);
-                        if(card && !card.classList.contains('active')) togglePolicy(id, card);
+                        if(card && !card.classList.contains('active')) {
+                            togglePolicy(id, card); 
+                            anyActivated = true;
+                        }
                     });
                     
-                    log.innerHTML += `<div style="color:var(--neon-green); margin-top:5px;">SYS_REPLY: ${replyMessage}</div>`;
+                    if(!anyActivated) {
+                         log.innerHTML += `<div style="color:var(--neon-yellow); margin-top:5px;">SYS_REPLY: Recommended policies are already active.</div>`;
+                    } else {
+                         log.innerHTML += `<div style="color:var(--neon-green); margin-top:5px;">SYS_REPLY: ${replyMessage}</div>`;
+                         
+                         // Trigger visually striking alert
+                         if (isFestival) {
+                             triggerLocationAlert(detectedLoc ? `${detectedLoc}` : "CITY-WIDE EVENT", matchedPolicies, true);
+                         } else if (detectedLoc) {
+                             triggerLocationAlert(detectedLoc, matchedPolicies, false);
+                         }
+                    }
                     log.scrollTop = log.scrollHeight;
                 }, 800); 
                 return; 
             }
 
-            // --- REAL API CALL ---
+            // --- 2. DYNAMIC AI LOGIC (Used if API key is present) ---
             const prompt = `
-                System: You are an Expert Policy Advisor for Delhi Pollution Control (DPCC).
-                Current City Status: AQI is ${Math.round(State.currentDisplayAqi)}, Wind Speed is ${State.windSpeed} km/h.
+                System: You are an Expert Policy Advisor for Delhi NCR Pollution Control.
                 User Input: '${userText}'
                 Available Action Keys: ["odd_even", "construction_ban", "smog_tower", "mech_sweeper", "anti_smog_gun", "wfh"].
-                Task: If the user asks for suggestions, analyze the Current City Status and suggest the most appropriate actions.
+                Contextual Rules: 
+                1. If the user mentions an Indian festival (like Diwali, Dussehra) or fireworks/crackers, immediately trigger a "FESTIVAL EMERGENCY PROTOCOL". Recommend aggressive measures like ["anti_smog_gun", "mech_sweeper", "smog_tower", "construction_ban"].
+                2. If the user mentions a specific location (e.g., "Noida Electronic City", "Okhla"), recommend the most effective localized policies based on its characteristics (corporate hub, heavy industrial, etc.).
+                3. If BOTH a festival and location are mentioned, apply the aggressive emergency measures specifically to that location.
                 Output Rule: Return ONLY a valid JSON object.
-                Format: {"recommend": ["action_key"], "reason": "Short explanation"}
+                Format: {"recommend": ["action_key_1", "action_key_2"], "is_emergency": true/false, "reason": "Short explanation mentioning the location and event characteristics."}
             `;
             
             try {
@@ -895,7 +988,7 @@
                 const data = await response.json();
                 
                 if(data.error) {
-                    log.innerHTML += `<div style="color:red; margin-top:5px;">ERR_CONN: API Key Invalid. Falling back to local logic...</div>`;
+                    log.innerHTML += `<div style="color:red; margin-top:5px;">ERR_CONN: API Key Invalid or Quota Reached.</div>`;
                     log.scrollTop = log.scrollHeight;
                     return;
                 }
@@ -903,14 +996,27 @@
                 let raw = data.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim();
                 const res = JSON.parse(raw);
                 
+                let anyActivated = false;
                 if(res.recommend && Array.isArray(res.recommend)) {
                     res.recommend.forEach(id => {
                         const card = document.getElementById(`card_${id}`);
-                        if(card && !card.classList.contains('active')) togglePolicy(id, card);
+                        if(card && !card.classList.contains('active')) {
+                            togglePolicy(id, card);
+                            anyActivated = true;
+                        }
                     });
                 }
                 
                 log.innerHTML += `<div style="color:var(--neon-green); margin-top:5px;">SYS_REPLY: ${res.reason}</div>`;
+                
+                if (anyActivated) {
+                    if (res.is_emergency) {
+                        triggerLocationAlert(detectedLoc ? detectedLoc : "FESTIVAL ZONE", res.recommend, true);
+                    } else if (detectedLoc) {
+                        triggerLocationAlert(detectedLoc, res.recommend, false);
+                    }
+                }
+                
             } catch (e) { 
                 log.innerHTML += `<div style="color:red; margin-top:5px;">ERR_CONN: AI OFFLINE.</div>`; 
             }
